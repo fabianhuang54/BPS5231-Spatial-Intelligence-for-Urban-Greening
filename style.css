@@ -35,6 +35,7 @@ h1, h2, h3 { font-weight: 400; letter-spacing: -0.035em; line-height: 0.98; }
 .site-rail { position: fixed; inset: 0 auto 0 0; display: flex; width: var(--rail-width); min-height: 100vh; flex-direction: column; justify-content: space-between; padding: var(--page-padding); border-right: 1px solid var(--line); }
 .site-mark { display: inline-grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 1px solid var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-decoration: none; }
 .rail-content { margin: auto 0; }
+.rail-headshot { display: none; }
 .rail-name { margin: 0.85rem 0 0; font-size: 1.15rem; font-weight: 700; }
 .rail-description { max-width: 15rem; margin: 0.45rem 0 2rem; color: var(--muted); font-size: 0.9rem; }
 .site-nav { display: grid; gap: 0.6rem; }
@@ -114,13 +115,16 @@ figcaption { margin-top: 0.65rem; }
   .eyebrow, .rail-description, .rail-contact { display: none; }
   .site-mark { width: 2.75rem; height: 2.75rem; }
   .rail-name { align-self: center; margin: 0; font-size: 0.9rem; }
+  .rail-headshot { display: block; grid-column: 1 / -1; width: min(7rem, 28vw); margin: 0 0 0.25rem; }
+  .rail-headshot img { display: block; width: 100%; aspect-ratio: 3 / 4; border: 1px solid var(--line); object-fit: cover; object-position: center top; }
+  .eyebrow { display: block; grid-column: 1 / -1; }
   .site-nav { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
   .site-nav a { display: inline-flex; min-height: 2.75rem; align-items: center; font-size: 0.75rem; }
   .page-content { margin-left: 0; }
   .hero, .section-heading, .project, .content-section, .site-footer { grid-template-columns: 1fr; gap: 1rem; }
   .hero { min-height: 64svh; }
   .hero-content { grid-template-columns: 1fr; gap: 2rem; }
-  .headshot-frame { width: min(13rem, 60vw); }
+  .hero .headshot-frame { display: none; }
   h1 { font-size: clamp(3rem, 15vw, 5.25rem); }
   .project { grid-template-areas: "content" "meta"; }
   .project-meta { grid-template-columns: 3rem 1fr; gap: 1rem; }
