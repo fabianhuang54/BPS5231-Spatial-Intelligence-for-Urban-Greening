@@ -54,9 +54,12 @@ h1, h2, h3 { font-weight: 400; letter-spacing: -0.035em; line-height: 0.98; }
 .work-section, .content-section, .site-footer { scroll-margin-top: 1rem; }
 
 .hero { min-height: min(40rem, 88svh); align-items: end; }
-.hero-content { max-width: var(--measure); }
+.hero-content { display: grid; grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem); align-items: end; gap: clamp(1.5rem, 5vw, 5rem); max-width: 64rem; }
+.hero-copy { max-width: var(--measure); }
+.headshot-frame { width: 100%; margin: 0; }
+.headshot { display: block; width: 100%; aspect-ratio: 3 / 4; border: 1px solid var(--line); object-fit: cover; object-position: center top; }
 h1 { max-width: 12ch; margin-bottom: 1.6rem; font-size: clamp(3.4rem, 7.5vw, 7.5rem); }
-.hero-content > p, .section-heading > div > p { max-width: 39rem; margin-bottom: 0; color: var(--muted); font-size: clamp(1rem, 1.35vw, 1.25rem); }
+.hero-copy > p, .section-heading > div > p { max-width: 39rem; margin-bottom: 0; color: var(--muted); font-size: clamp(1rem, 1.35vw, 1.25rem); }
 .section-heading { align-items: start; padding-bottom: clamp(2rem, 4vw, 4rem); }
 .section-heading h2, .content-section h2 { margin: 0 0 1rem; font-size: clamp(2rem, 4vw, 4rem); }
 
@@ -116,6 +119,8 @@ figcaption { margin-top: 0.65rem; }
   .page-content { margin-left: 0; }
   .hero, .section-heading, .project, .content-section, .site-footer { grid-template-columns: 1fr; gap: 1rem; }
   .hero { min-height: 64svh; }
+  .hero-content { grid-template-columns: 1fr; gap: 2rem; }
+  .headshot-frame { width: min(13rem, 60vw); }
   h1 { font-size: clamp(3rem, 15vw, 5.25rem); }
   .project { grid-template-areas: "content" "meta"; }
   .project-meta { grid-template-columns: 3rem 1fr; gap: 1rem; }
