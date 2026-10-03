@@ -23,6 +23,7 @@ executing==2.2.1
 fastjsonschema==2.21.2
 fonttools==4.60.2
 fqdn==1.6.0
+geopandas==1.0.1
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
@@ -82,7 +83,9 @@ ptyprocess==0.7.0
 pure_eval==0.2.4
 pycparser==2.23
 Pygments==2.21.0
+pyogrio==0.11.1
 pyparsing==3.3.3
+pyproj==3.6.1
 python-dateutil==2.9.0.post0
 python-json-logger==4.0.0
 pytz==2026.4
@@ -98,6 +101,7 @@ scikit-learn==1.6.1
 scipy==1.13.1
 seaborn==0.13.2
 Send2Trash==2.1.0
+shapely==2.0.7
 six==1.17.0
 soupsieve==2.8.4
 stack-data==0.6.3
