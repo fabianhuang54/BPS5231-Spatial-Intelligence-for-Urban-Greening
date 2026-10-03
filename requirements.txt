@@ -65,6 +65,7 @@ nest-asyncio==1.6.0
 notebook==7.5.7
 notebook_shim==0.2.4
 numpy==2.0.2
+nus-campus-weather==1.1.0
 overrides==7.7.0
 packaging==26.3
 pandas==2.3.3
@@ -73,6 +74,7 @@ parso==0.8.7
 pexpect==4.9.0
 pillow==11.3.0
 platformdirs==4.4.0
+pooch==1.9.0
 prometheus_client==0.26.0
 prompt_toolkit==3.0.52
 psutil==7.2.2
