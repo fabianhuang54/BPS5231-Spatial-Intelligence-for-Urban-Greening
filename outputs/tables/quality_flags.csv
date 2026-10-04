@@ -3,5 +3,7 @@ solar: station-months with >= 50% of night readings above 50 W/m2 (whole month),
 "solar > 50 W/m2 at night (20:00-05:59), remaining readings",solar,578
 solar above BSRN physically-possible limit (09:00-16:59),solar,11
 pressure outside 980-1030 hPa,pressure,2868
-wind speed > 15 m/s,wind_speed,21
+"wind speed: same value repeated 6+ hours (frozen sensor, WS17 December)",wind_speed,143
+"wind direction: same value repeated 6+ hours (frozen sensor, WS17 December)",wind_dir,147
+"wind speed > 10 m/s, remaining readings",wind_speed,5
 relative humidity outside 0-100%,rh,0
