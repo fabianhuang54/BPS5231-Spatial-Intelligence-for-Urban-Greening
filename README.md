@@ -1,4 +1,4 @@
-#Spatial Intelligence for Urban Greening: Identifying Priority Locations and Greening Interventions
+# Spatial Intelligence for Urban Greening: Identifying Priority Locations and Greening Interventions
 
 BPS5231 (AI for Sustainable Building Design) group project.
 Study site: NUS Kent Ridge Campus.
