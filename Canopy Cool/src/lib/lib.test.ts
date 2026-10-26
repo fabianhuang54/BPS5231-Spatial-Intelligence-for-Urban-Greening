@@ -4,7 +4,7 @@ import { computeImpact } from './impact';
 import { COEFF } from './evidence';
 import { shadowOffset, solarPosition } from './sun';
 import type { ShadeResult } from './shade';
-import type { Site, Tree } from './types';
+import { NO_AREAS, type Site, type Tree } from './types';
 
 const deg = (r: number) => (r * 180) / Math.PI;
 
@@ -39,7 +39,7 @@ describe('geo', () => {
 describe('impact', () => {
   const sq = (x: number): [number, number][] => [[x, 0], [x + 10, 0], [x + 10, 10], [x, 10], [x, 0]];
   const site = {
-    lat: 1.28, lng: 103.85, half: 150, roads: [], walkways: [], trees: [],
+    lat: 1.28, lng: 103.85, half: 150, roads: [], walkways: [], trees: [], ...NO_AREAS,
     buildings: [
       { id: 1, name: null, ring: sq(0), height: 10, heightTagged: true },
       { id: 2, name: null, ring: sq(50), height: 10, heightTagged: true },

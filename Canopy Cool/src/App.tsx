@@ -4,25 +4,27 @@ import { MapCanvas, type Hit, type View } from './components/MapCanvas';
 import { Minimap } from './components/Minimap';
 import { Panel } from './components/Panel';
 import { loadOsm, DEFAULT_CROWN_RADIUS, DEFAULT_TREE_HEIGHT } from './lib/osm';
+import { loadNus, nusSite, nusWeather, type NusData } from './lib/nus';
 import { loadHeritageTrees } from './lib/nparks';
 import { loadWeather, type Weather } from './lib/nea';
 import { solarPosition, sgDate, sgHourNow } from './lib/sun';
 import { analyse, recommend } from './lib/shade';
 import { computeImpact } from './lib/impact';
-import { inRing, distToPolyline } from './lib/geo';
+import { inRing, inPoly, distToPolyline } from './lib/geo';
 import { PLACES } from './lib/places';
-import type { Place, Pt, Site, Tree } from './lib/types';
+import { NO_AREAS, type Place, type Pt, type Site, type Tree } from './lib/types';
 
 const Scene3D = lazy(() => import('./components/Scene3D')); // Three.js loads only when 3D is opened
 
 export type Tool = 'tree' | 'roof';
-export interface SourceStatus { state: 'loading' | 'ok' | 'error'; note?: string }
+export interface SourceStatus { state: 'loading' | 'ok' | 'error' | 'skipped'; note?: string }
 
 const clampHour = (h: number) => Math.min(18.5, Math.max(7, h));
 
 export default function App() {
   const [place, setPlace] = useState<Place>(PLACES[0]);
-  const [half, setHalf] = useState(150);
+  const [half, setHalf] = useState(250);
+  const [nus, setNus] = useState<NusData | null>(null);
   const [site, setSite] = useState<Site | null>(null);
   const [status, setStatus] = useState<Record<'osm' | 'nparks' | 'nea', SourceStatus>>({ osm: { state: 'loading' }, nparks: { state: 'loading' }, nea: { state: 'loading' } });
   const [weather, setWeather] = useState<Weather | null>(null);
@@ -49,6 +51,17 @@ export default function App() {
     let live = true;
     setView({ k: 1, x: 0, z: 0 }); setSite(null); setProposed([]); setGreenRoofs(new Set()); setSuggestions([]);
     setStatus((s) => ({ ...s, osm: { state: 'loading' }, nparks: { state: 'loading' } }));
+    if (place.nus) {
+      // bundled NUS campus layers: no network needed
+      const { x, z } = place.nus;
+      loadNus().then((d) => {
+        if (!live) return;
+        setNus(d);
+        setSite(nusSite(d, x, z, half));
+        setStatus((s) => ({ ...s, osm: { state: 'ok', note: 'bundled' }, nparks: { state: 'skipped' } }));
+      }, (e) => live && setStatus((s) => ({ ...s, osm: { state: 'error', note: String(e.message ?? e) } })));
+      return () => { live = false; };
+    }
     const osm = loadOsm(place.lat, place.lng, half);
     const nparks = loadHeritageTrees(place.lat, place.lng, half);
     Promise.allSettled([osm, nparks]).then(([o, n]) => {
@@ -57,7 +70,7 @@ export default function App() {
       const heritage = n.status === 'fulfilled' ? n.value : [];
       // an OSM node within 3 m of a heritage tree is the same tree: keep the NParks one
       const osmTrees = o.value.trees.filter((t) => !heritage.some((h) => Math.hypot(h.x - t.x, h.z - t.z) < 3));
-      setSite({ lat: place.lat, lng: place.lng, half, ...o.value, trees: [...osmTrees, ...heritage] });
+      setSite({ lat: place.lat, lng: place.lng, half, ...NO_AREAS, ...o.value, trees: [...osmTrees, ...heritage] });
       setStatus((s) => ({ ...s, osm: { state: 'ok' }, nparks: n.status === 'fulfilled' ? { state: 'ok' } : { state: 'error', note: String(n.reason.message ?? n.reason) } }));
     });
     return () => { live = false; };
@@ -66,6 +79,7 @@ export default function App() {
   useEffect(() => {
     let live = true;
     setStatus((s) => ({ ...s, nea: { state: 'loading' } }));
+    if (!navigator.onLine) { setWeather(null); setStatus((s) => ({ ...s, nea: { state: 'error', note: 'offline' } })); return; }
     loadWeather(place.lat, place.lng).then(
       (w) => { if (live) { setWeather(w); setStatus((s) => ({ ...s, nea: w.airTemp ? { state: 'ok' } : { state: 'error', note: 'no readings' } })); } },
       (e) => { if (live) setStatus((s) => ({ ...s, nea: { state: 'error', note: String(e.message ?? e) } })); },
@@ -74,6 +88,7 @@ export default function App() {
   }, [place]);
 
   const trees = useMemo(() => (site ? [...site.trees, ...proposed] : []), [site, proposed]);
+  const profile = useMemo(() => (nus && place.nus ? nusWeather(nus, place.nus.x, place.nus.z, hour) : null), [nus, place, hour]);
   const sun = useMemo(() => solarPosition(sgDate(hour), place.lat, place.lng), [hour, place]);
   const res = useMemo(() => (site ? analyse(site, trees, sun.alt, sun.az) : null), [site, trees, sun]);
   const impact = useMemo(() => (site && res ? computeImpact(site, trees, res, greenRoofs) : null), [site, trees, res, greenRoofs]);
@@ -91,7 +106,7 @@ export default function App() {
       return;
     }
     if (site.buildings.some((b) => inRing(x, z, b.ring))) return flash('Can’t plant inside a building');
-    if (site.roads.some((l) => distToPolyline(x, z, l.points) <= l.width / 2)) return flash('Can’t plant on a carriageway');
+    if (site.roads.some((l) => distToPolyline(x, z, l.points) <= l.width / 2) || site.paved.some((p) => inPoly(x, z, p))) return flash('Can’t plant on a road or pavement');
     if (site.walkways.some((l) => distToPolyline(x, z, l.points) <= l.width / 2)) return flash('Keep footpaths clear');
     if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < 3)) return flash('Too close to another tree');
     setProposed((p) => [...p, { id: `p${Date.now()}`, x, z, radius, height: DEFAULT_TREE_HEIGHT, source: 'proposed' }]);
@@ -139,7 +154,7 @@ export default function App() {
       </div>
       <Panel
         place={place} setPlace={setPlace} half={half} setHalf={setHalf}
-        status={status} weather={weather} site={site} sun={sun} hour={hour} setHour={setHour}
+        status={status} weather={weather} profile={profile} site={site} sun={sun} hour={hour} setHour={setHour}
         tool={tool} setTool={setTool} radius={radius} setRadius={setRadius}
         impact={impact} proposed={proposed} suggestions={suggestions} onSuggest={suggest} onAccept={acceptSuggestions}
         onReset={() => { setProposed([]); setGreenRoofs(new Set()); setSuggestions([]); }}

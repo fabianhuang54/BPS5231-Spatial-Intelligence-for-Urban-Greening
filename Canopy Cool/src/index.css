@@ -27,3 +27,4 @@ button { cursor: pointer; } button.on { background: var(--accent); color: #042f2
 .seg { position: absolute; left: 12px; top: 12px; display: flex; } .seg button { border-radius: 0; padding: 5px 14px; } .seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; }
 .minimap { position: absolute; right: 12px; bottom: 12px; width: 180px; height: 180px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; touch-action: none; }
 .warn { display: block; color: #fbbf24; font-size: 11.5px; margin-top: 2px; }
+.dot.skipped { background: #475569; }

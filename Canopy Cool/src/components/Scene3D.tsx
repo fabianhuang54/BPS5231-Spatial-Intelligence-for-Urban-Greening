@@ -17,7 +17,7 @@ interface Props {
   onView: (v: View) => void;
 }
 
-const TREE_COLOR = { osm: 0x22a85a, nparks: 0xd9b82b, proposed: 0x4ade80 };
+const TREE_COLOR = { osm: 0x22a85a, nus: 0x22a85a, nparks: 0xd9b82b, proposed: 0x4ade80 };
 
 /** Orbitable 3D view: extruded OSM buildings, tree crowns, shaded ground, and a sun light at the real sun position. */
 export default function Scene3D({ site, trees, res, greenRoofs, sun, onClick, onHover, onView }: Props) {
@@ -137,26 +137,24 @@ export default function Scene3D({ site, trees, res, greenRoofs, sun, onClick, on
     return () => { bMat.dispose(); bUnk.dispose(); roofMat.dispose(); };
   }, [site, greenRoofs]);
 
-  // trees (cheap; rebuilt on every plant). One shared material per source.
+  // trees: one instanced mesh each for trunks and crowns (campus data has thousands of trees)
   useEffect(() => {
-    const t = three.current; if (!t) return;
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b4636 });
-    const crownMats = Object.fromEntries(Object.entries(TREE_COLOR).map(([k, c]) => [k, new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 })]));
-    const crownGeo = new THREE.SphereGeometry(1, 16, 12);
-    const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 1, 6);
-    for (const tr of trees) {
+    const t = three.current; if (!t || !trees.length) return;
+    const trunkGeo = new THREE.CylinderGeometry(0.25, 0.35, 1, 6), crownGeo = new THREE.SphereGeometry(1, 8, 6);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5b4636 }), crownMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length), crowns = new THREE.InstancedMesh(crownGeo, crownMat, trees.length);
+    trunks.castShadow = crowns.castShadow = true;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), color = new THREE.Color();
+    trees.forEach((tr, i) => {
       const th = tr.height * 0.55;
-      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-      trunk.scale.set(1, th, 1); trunk.position.set(tr.x, th / 2, tr.z); trunk.castShadow = true;
-      const crown = new THREE.Mesh(crownGeo, crownMats[tr.source]);
-      crown.scale.set(tr.radius, tr.radius * 0.7, tr.radius); crown.position.set(tr.x, th + tr.radius * 0.5, tr.z);
-      crown.castShadow = true;
-      t.treeGroup.add(trunk, crown);
-    }
+      trunks.setMatrixAt(i, m.compose(new THREE.Vector3(tr.x, th / 2, tr.z), q, new THREE.Vector3(1, th, 1)));
+      crowns.setMatrixAt(i, m.compose(new THREE.Vector3(tr.x, th + tr.radius * 0.5, tr.z), q, new THREE.Vector3(tr.radius, tr.radius * 0.7, tr.radius)));
+      crowns.setColorAt(i, color.setHex(TREE_COLOR[tr.source]));
+    });
+    t.treeGroup.add(trunks, crowns);
     return () => {
       t.treeGroup.clear();
-      [trunkMat, ...Object.values(crownMats)].forEach((m) => m.dispose());
-      crownGeo.dispose(); trunkGeo.dispose();
+      trunks.dispose(); crowns.dispose(); trunkGeo.dispose(); crownGeo.dispose(); trunkMat.dispose(); crownMat.dispose();
     };
   }, [trees]);
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { distToPolyline, inRing } from '../lib/geo';
-import { buildOverlay } from '../lib/ground';
+import { distToPolyline, inPoly, inRing } from '../lib/geo';
+import { AREA_COLORS, buildOverlay, fillPolys } from '../lib/ground';
 import type { ShadeResult } from '../lib/shade';
 import type { Pt, Site, Tree } from '../lib/types';
 
@@ -30,6 +30,7 @@ export function hitTest(site: Site, trees: Tree[], x: number, z: number): Hit {
   for (const b of site.buildings) if (inRing(x, z, b.ring)) return { kind: 'building', id: b.id, label: `${b.name ?? 'Building'} · ${b.height.toFixed(0)} m${b.heightTagged ? '' : ' (assumed)'}` };
   for (const l of site.walkways) if (distToPolyline(x, z, l.points) <= l.width / 2 + 0.5) return { kind: 'walkway', label: `${l.name ?? 'Footpath'} · ${l.kind}${l.covered ? ' · covered' : ''}` };
   for (const l of site.roads) if (distToPolyline(x, z, l.points) <= l.width / 2) return { kind: 'road', label: `${l.name ?? 'Unnamed road'} · ${l.kind} · ${l.width.toFixed(1)} m wide` };
+  if (site.paved.some((p) => inPoly(x, z, p))) return { kind: 'road', label: 'Road / pavement (NUS campus layer)' };
   return null;
 }
 
@@ -73,6 +74,9 @@ export function MapCanvas({ site, trees, res, greenRoofs, suggestions, onClick, 
     ctx.save();
     ctx.beginPath(); ctx.rect(x0, y0, 2 * site.half * scale, 2 * site.half * scale); ctx.clip();
 
+    const P = ([x, z]: Pt) => toScreen(x, z);
+    fillPolys(ctx, site.turf, P, AREA_COLORS.turf); fillPolys(ctx, site.shrubs, P, AREA_COLORS.shrubs); fillPolys(ctx, site.forest, P, AREA_COLORS.forest);
+    fillPolys(ctx, site.paved, P, AREA_COLORS.paved);
     site.roads.forEach((l) => stroke(l.points, l.width, '#252f3b'));
     site.walkways.forEach((l) => stroke(l.points, l.width, l.covered ? '#8a99ab' : '#4b5a6b'));
     ctx.imageSmoothingEnabled = false;
@@ -87,6 +91,7 @@ export function MapCanvas({ site, trees, res, greenRoofs, suggestions, onClick, 
       ctx.fill();
       ctx.strokeStyle = '#0b1117'; ctx.lineWidth = 1; ctx.stroke();
     }
+    fillPolys(ctx, site.roofGreen, P, AREA_COLORS.roofGreen); fillPolys(ctx, site.pv, P, AREA_COLORS.pv);
     for (const t of trees) {
       const [sx, sy] = toScreen(t.x, t.z);
       const r = t.radius * scale;

@@ -1,7 +1,7 @@
 import { ringArea } from './geo';
 import { DEFAULT_TREE_HEIGHT } from './osm';
 import { shadowOffset } from './sun';
-import type { Building, Pt, Site, Tree } from './types';
+import type { Building, Poly, Pt, Site, Tree } from './types';
 
 export const CELL = 2; // metres per analysis cell
 
@@ -22,6 +22,14 @@ function path(ctx: CanvasRenderingContext2D, g: Grid, pts: Pt[]) {
   pts.forEach(([x, z], i) => (i ? ctx.lineTo(toCell(g, x), toCell(g, z)) : ctx.moveTo(toCell(g, x), toCell(g, z))));
 }
 
+function fillPolys(ctx: CanvasRenderingContext2D, g: Grid, polys: Poly[], dx = 0, dz = 0) {
+  for (const poly of polys) {
+    ctx.beginPath();
+    for (const r of poly) { r.forEach(([x, z], i) => (i ? ctx.lineTo(toCell(g, x + dx), toCell(g, z + dz)) : ctx.moveTo(toCell(g, x + dx), toCell(g, z + dz)))); ctx.closePath(); }
+    ctx.fill('evenodd');
+  }
+}
+
 function alphaMask(ctx: CanvasRenderingContext2D, n: number): Uint8Array {
   const d = ctx.getImageData(0, 0, n, n).data;
   const m = new Uint8Array(n * n);
@@ -34,6 +42,7 @@ export function pavedMask(site: Site, g: Grid): Uint8Array {
   const ctx = mkCanvas(g.n);
   ctx.fillStyle = ctx.strokeStyle = '#000';
   ctx.lineJoin = 'round';
+  fillPolys(ctx, g, site.paved);
   for (const l of [...site.roads, ...site.walkways]) {
     ctx.lineWidth = l.width / CELL;
     ctx.beginPath(); path(ctx, g, l.points); ctx.stroke();
@@ -67,7 +76,7 @@ export function buildingShadow(buildings: Building[], g: Grid, alt: number, az: 
 }
 
 /** Canopy shade: crown disc displaced by the shadow of the crown centre height. Overhead sun when alt ≈ 90°. */
-export function canopyShade(trees: Tree[], g: Grid, alt: number, az: number): Uint8Array {
+export function canopyShade(trees: Tree[], g: Grid, alt: number, az: number, forest: Poly[] = []): Uint8Array {
   const ctx = mkCanvas(g.n);
   ctx.fillStyle = '#000';
   if (alt > 0.02) {
@@ -77,6 +86,8 @@ export function canopyShade(trees: Tree[], g: Grid, alt: number, az: number): Ui
       ctx.arc(toCell(g, t.x + dx), toCell(g, t.z + dz), t.radius / CELL, 0, Math.PI * 2);
       ctx.fill();
     }
+    const [fx, fz] = shadowOffset(DEFAULT_TREE_HEIGHT * 0.75, alt, az);
+    fillPolys(ctx, g, forest, fx, fz);
   }
   return alphaMask(ctx, g.n);
 }
@@ -97,8 +108,8 @@ export function analyse(site: Site, trees: Tree[], alt: number, az: number): Sha
   const building = buildingMask(site.buildings, g);
   const bShade = buildingShadow(site.buildings, g, alt, az);
   const existing = trees.filter((t) => t.source !== 'proposed');
-  const baseTree = canopyShade(existing, g, alt, az);
-  const allTree = trees.length === existing.length ? baseTree : canopyShade(trees, g, alt, az);
+  const baseTree = canopyShade(existing, g, alt, az, site.forest);
+  const allTree = trees.length === existing.length ? baseTree : canopyShade(trees, g, alt, az, site.forest);
   let pavedCells = 0, b = 0, s = 0;
   for (let i = 0; i < paved.length; i++) {
     if (!paved[i] || building[i]) continue;
@@ -134,6 +145,14 @@ export function recommend(site: Site, trees: Tree[], res: ShadeResult, count: nu
         for (const s of [-1, 1]) cands.push([x + nx * off * s, z + nz * off * s]);
       }
     }
+  }
+  // Area-based sites (NUS polygons) have no centrelines: also try open ground within ~6 m of paved cells.
+  for (let cz = 2; cz < g.n - 2; cz += 4) for (let cx = 2; cx < g.n - 2; cx += 4) {
+    const k = cz * g.n + cx;
+    if (paved[k] || building[k]) continue;
+    let near = false;
+    for (let j = -3; j <= 3 && !near; j++) for (let i = -3; i <= 3; i++) if (paved[(cz + j) * g.n + cx + i]) { near = true; break; }
+    if (near) cands.push([(cx + 0.5) * CELL - g.half, (cz + 0.5) * CELL - g.half]);
   }
   const cellAt = (x: number, z: number) => {
     const cx = Math.floor((x + g.half) / CELL), cz = Math.floor((z + g.half) / CELL);

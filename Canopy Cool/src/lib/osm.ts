@@ -50,7 +50,7 @@ async function overpass(query: string): Promise<OsmEl[]> {
 
 const num = (v?: string) => { const n = parseFloat(v ?? ''); return Number.isFinite(n) ? n : null; };
 
-export async function loadOsm(lat: number, lng: number, half: number): Promise<Omit<Site, 'lat' | 'lng' | 'half'>> {
+export async function loadOsm(lat: number, lng: number, half: number): Promise<Pick<Site, 'roads' | 'walkways' | 'buildings' | 'trees'>> {
   const [s, w, n, e] = bbox(lat, lng, half);
   const [ms, mw, mn, me] = bbox(lat, lng, half + SHADOW_MARGIN);
   const site = `${s},${w},${n},${e}`, wide = `${ms},${mw},${mn},${me}`;

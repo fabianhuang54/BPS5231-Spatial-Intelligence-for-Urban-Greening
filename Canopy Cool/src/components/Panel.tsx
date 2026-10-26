@@ -3,6 +3,7 @@ import type { SourceStatus, Tool } from '../App';
 import { COEFF, REFS } from '../lib/evidence';
 import type { Impact } from '../lib/impact';
 import type { Weather } from '../lib/nea';
+import type { NusWeather } from '../lib/nus';
 import { DEFAULT_BUILDING_HEIGHT, DEFAULT_CROWN_RADIUS, DEFAULT_TREE_HEIGHT } from '../lib/osm';
 import { PLACES } from '../lib/places';
 import type { Place, Pt, Site, Tree } from '../lib/types';
@@ -11,7 +12,7 @@ interface Props {
   place: Place; setPlace: (p: Place) => void;
   half: number; setHalf: (n: number) => void;
   status: Record<'osm' | 'nparks' | 'nea', SourceStatus>;
-  weather: Weather | null; site: Site | null;
+  weather: Weather | null; profile: NusWeather | null; site: Site | null;
   sun: { alt: number; az: number };
   hour: number; setHour: Dispatch<SetStateAction<number>>;
   tool: Tool; setTool: (t: Tool) => void;
@@ -47,9 +48,20 @@ export function Panel(p: Props) {
         <div className="inline">
           <input aria-label="latitude" defaultValue={p.place.lat} key={'a' + p.place.lat} onBlur={(e) => { const v = +e.target.value; if (v !== p.place.lat && v > 1.15 && v < 1.5) p.setPlace({ name: 'Custom', lat: v, lng: p.place.lng }); }} />
           <input aria-label="longitude" defaultValue={p.place.lng} key={'b' + p.place.lng} onBlur={(e) => { const v = +e.target.value; if (v !== p.place.lng && v > 103.6 && v < 104.1) p.setPlace({ name: 'Custom', lat: p.place.lat, lng: v }); }} />
-          <select value={p.half} onChange={(e) => p.setHalf(+e.target.value)}>{[100, 150, 250].map((n) => <option key={n} value={n}>{2 * n} m</option>)}</select>
+          <select value={p.half} onChange={(e) => p.setHalf(+e.target.value)}>{[100, 150, 250, 500].map((n) => <option key={n} value={n}>{2 * n} m</option>)}</select>
         </div>
       </section>
+
+      {p.profile && (
+        <section>
+          <h2>Campus stations <small>NUS 2025 hourly · offline</small></h2>
+          <Row k="Typical air temperature" v={`${p.profile.year[0].toFixed(1)} °C`} />
+          <Row k={`Hot afternoons (top 10% of days)`} v={`${p.profile.hot[0].toFixed(1)} °C`} />
+          <Row k="Relative humidity" v={`${p.profile.year[1].toFixed(0)} %`} />
+          <Row k="Wind · global radiation" v={`${p.profile.year[2].toFixed(1)} m/s · ${p.profile.year[3].toFixed(0)} W/m²`} />
+          <p className="note">{p.profile.station} ({p.profile.type}), {p.profile.distanceM.toFixed(0)} m from the site centre. Mean of {p.profile.days} days at this hour; hot = the {p.profile.hotDays} days with the highest daily maximum. Follows the time slider.</p>
+        </section>
+      )}
 
       <section>
         <h2>Live weather <small>NEA · data.gov.sg</small> <Dot s={p.status.nea} /></h2>
@@ -62,7 +74,7 @@ export function Panel(p: Props) {
             {w.forecast && <Row k={`2-hr forecast · ${w.forecast.area}`} v={w.forecast.text} />}
             <p className="note">{w.airTemp.station}, {w.airTemp.distanceKm.toFixed(1)} km away · {time(w.airTemp.timestamp)}</p>
           </>
-        ) : <p className="note">{p.status.nea.state === 'loading' ? 'Loading…' : `Unavailable (${p.status.nea.note})`}</p>}
+        ) : <p className="note">{p.status.nea.state === 'loading' ? 'Loading…' : `Unavailable (${p.status.nea.note}). The app works without it.`}</p>}
       </section>
 
       <section>
@@ -106,15 +118,23 @@ export function Panel(p: Props) {
 
       <section>
         <h2>Data in view</h2>
-        {site ? (
+        {site && p.place.nus ? (
+          <>
+            <Row k="Buildings" v={`${inSite.length} (${untagged} assumed ${DEFAULT_BUILDING_HEIGHT} m)`}><Dot s={p.status.osm} /></Row>
+            <Row k="Tree crowns · forest patches" v={`${site.trees.length} · ${site.forest.length}`} />
+            <Row k="Paved areas · turf · shrubs" v={`${site.paved.length} · ${site.turf.length} · ${site.shrubs.length}`} />
+            <Row k="Existing green roofs · PV" v={`${site.roofGreen.length} · ${site.pv.length}`} />
+            <p className="note">Bundled NUS Kent Ridge campus GIS layers (BPS5231 project data), so this works offline. Each crown is drawn as a circle of the same area as its mapped canopy. Buildings without a recorded height or floor count are assumed {DEFAULT_BUILDING_HEIGHT} m, and trees are assumed {DEFAULT_TREE_HEIGHT} m tall. Forest patches shade fully.</p>
+          </>
+        ) : site ? (
           <>
             <Row k="Roads · footpaths" v={`${site.roads.length} · ${site.walkways.length}`}><Dot s={p.status.osm} /></Row>
             <Row k="Buildings" v={`${inSite.length} (${untagged} assumed ${DEFAULT_BUILDING_HEIGHT} m)`} />
             <Row k="Trees: OSM · NParks heritage" v={`${site.trees.filter((t) => t.source === 'osm').length} · ${site.trees.filter((t) => t.source === 'nparks').length}`}><Dot s={p.status.nparks} /></Row>
+            {p.status.nparks.state === 'error' && <p className="note">NParks heritage trees unavailable: {p.status.nparks.note}</p>}
+            <p className="note">Live data, needs a network (cached for 7 days). Buildings up to 80 m outside the box are loaded only so their shadows fall in. Bridges and tunnels are left out. Roads, footpaths, buildings and trees © OpenStreetMap contributors (ODbL). Heritage trees: NParks via data.gov.sg. Where OSM has no crown size or height we assume a {DEFAULT_CROWN_RADIUS * 2} m crown and {DEFAULT_TREE_HEIGHT} m tree. NParks’ full street-tree inventory (TreesSG) has no open API.</p>
           </>
         ) : <p className="note">Loading…</p>}
-        {p.status.nparks.state === 'error' && <p className="note">NParks heritage trees unavailable: {p.status.nparks.note}</p>}
-        <p className="note">Buildings up to 80 m outside the box are loaded only so their shadows fall in. Bridges and tunnels are left out. Roads, footpaths, buildings and trees © OpenStreetMap contributors (ODbL). Heritage trees: NParks via data.gov.sg. Weather: NEA via data.gov.sg. NParks’ full street-tree inventory (TreesSG) has no open API, so tree coverage depends on what OSM mappers have recorded. Where OSM has no crown size or height we assume a {DEFAULT_CROWN_RADIUS * 2} m crown and {DEFAULT_TREE_HEIGHT} m tree.</p>
       </section>
 
       <section>
