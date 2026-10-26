@@ -1,165 +1,132 @@
-import { useEffect, useMemo, useState } from 'react';
-import { lazy, Suspense } from 'react';
-import { MapCanvas, type Hit, type View } from './components/MapCanvas';
-import { Minimap } from './components/Minimap';
-import { Panel } from './components/Panel';
-import { loadOsm, DEFAULT_CROWN_RADIUS, DEFAULT_TREE_HEIGHT } from './lib/osm';
-import { loadNus, nusSite, nusWeather, type NusData } from './lib/nus';
-import { loadHeritageTrees } from './lib/nparks';
-import { loadWeather, type Weather } from './lib/nea';
-import { solarPosition, sgDate, sgHourNow } from './lib/sun';
-import { analyse, recommend } from './lib/shade';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { BuildingCard, Hint, PlanCard, PreviewCard, SpotsCard } from './components/Cards';
+import { CampusMap } from './components/CampusMap';
+import { Sources } from './components/Sources';
+import { DEFAULT_CROWN_RADIUS, DEFAULT_TREE_HEIGHT } from './lib/defaults';
 import { computeImpact } from './lib/impact';
-import { inRing, inPoly, distToPolyline } from './lib/geo';
-import { PLACES } from './lib/places';
-import { NO_AREAS, type Place, type Pt, type Site, type Tree } from './lib/types';
+import { loadNus, NUS_LL, nusSite, nusWeather, type NusData } from './lib/nus';
+import { plantingBlock } from './lib/planting';
+import { analyse, recommend, shadeGain, type Spot } from './lib/shade';
+import { solarPosition, sgDate } from './lib/sun';
+import type { Area, Tree } from './lib/types';
 
-const Scene3D = lazy(() => import('./components/Scene3D')); // Three.js loads only when 3D is opened
+const Scene3D = lazy(() => import('./components/Scene3D')); // Three.js loads only when an area is opened
 
-export type Tool = 'tree' | 'roof';
-export interface SourceStatus { state: 'loading' | 'ok' | 'error' | 'skipped'; note?: string }
-
-const clampHour = (h: number) => Math.min(18.5, Math.max(7, h));
+const fmtHour = (h: number) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+const proposedTree = (id: string, x: number, z: number): Tree => ({ id, x, z, radius: DEFAULT_CROWN_RADIUS, height: DEFAULT_TREE_HEIGHT, source: 'proposed' });
 
 export default function App() {
-  const [place, setPlace] = useState<Place>(PLACES[0]);
-  const [half, setHalf] = useState(250);
-  const [nus, setNus] = useState<NusData | null>(null);
-  const [site, setSite] = useState<Site | null>(null);
-  const [status, setStatus] = useState<Record<'osm' | 'nparks' | 'nea', SourceStatus>>({ osm: { state: 'loading' }, nparks: { state: 'loading' }, nea: { state: 'loading' } });
-  const [weather, setWeather] = useState<Weather | null>(null);
-  const [hour, setHour] = useState(() => clampHour(sgHourNow()));
+  const [data, setData] = useState<NusData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [area, setArea] = useState<Area | null>(null);
+  const [hour, setHour] = useState(14); // a hot afternoon
   const [proposed, setProposed] = useState<Tree[]>([]);
   const [greenRoofs, setGreenRoofs] = useState<Set<number>>(new Set());
-  const [suggestions, setSuggestions] = useState<Pt[]>([]);
-  const [tool, setTool] = useState<Tool>('tree');
-  const [radius, setRadius] = useState(DEFAULT_CROWN_RADIUS);
-  const [hover, setHover] = useState<Hit>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [plantMode, setPlantMode] = useState(false);
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [hoverPt, setHoverPt] = useState<{ x: number; z: number } | null>(null);
+  const [sources, setSources] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [mode3d, setMode3d] = useState(false);
-  const [view, setView] = useState<View>({ k: 1, x: 0, z: 0 });
-  const [aspect, setAspect] = useState(1);
 
-  // keep the same state object while the label is unchanged so mouse moves don't re-render the whole app
-  const hoverKey = (h: Hit) => (!h ? '' : h.kind === 'tree' ? h.tree.id : h.label);
-  const onHover = (h: Hit) => setHover((prev) => (hoverKey(prev) === hoverKey(h) ? prev : h));
-  const flash = (m: string) => { setToast(m); setTimeout(() => setToast((t) => (t === m ? null : t)), 3000); };
+  useEffect(() => { loadNus().then(setData, (e) => setError(String(e.message ?? e))); }, []);
 
-  // Map data: OSM roads, footpaths, buildings and trees + NParks heritage trees.
-  useEffect(() => {
-    let live = true;
-    setView({ k: 1, x: 0, z: 0 }); setSite(null); setProposed([]); setGreenRoofs(new Set()); setSuggestions([]);
-    setStatus((s) => ({ ...s, osm: { state: 'loading' }, nparks: { state: 'loading' } }));
-    if (place.nus) {
-      // bundled NUS campus layers: no network needed
-      const { x, z } = place.nus;
-      loadNus().then((d) => {
-        if (!live) return;
-        setNus(d);
-        setSite(nusSite(d, x, z, half));
-        setStatus((s) => ({ ...s, osm: { state: 'ok', note: 'bundled' }, nparks: { state: 'skipped' } }));
-      }, (e) => live && setStatus((s) => ({ ...s, osm: { state: 'error', note: String(e.message ?? e) } })));
-      return () => { live = false; };
-    }
-    const osm = loadOsm(place.lat, place.lng, half);
-    const nparks = loadHeritageTrees(place.lat, place.lng, half);
-    Promise.allSettled([osm, nparks]).then(([o, n]) => {
-      if (!live) return;
-      if (o.status === 'rejected') { setStatus((s) => ({ ...s, osm: { state: 'error', note: String(o.reason.message ?? o.reason) } })); return; }
-      const heritage = n.status === 'fulfilled' ? n.value : [];
-      // an OSM node within 3 m of a heritage tree is the same tree: keep the NParks one
-      const osmTrees = o.value.trees.filter((t) => !heritage.some((h) => Math.hypot(h.x - t.x, h.z - t.z) < 3));
-      setSite({ lat: place.lat, lng: place.lng, half, ...NO_AREAS, ...o.value, trees: [...osmTrees, ...heritage] });
-      setStatus((s) => ({ ...s, osm: { state: 'ok' }, nparks: n.status === 'fulfilled' ? { state: 'ok' } : { state: 'error', note: String(n.reason.message ?? n.reason) } }));
-    });
-    return () => { live = false; };
-  }, [place, half, attempt]);
+  const flash = (m: string) => { setToast(m); setTimeout(() => setToast((t) => (t === m ? null : t)), 2800); };
+  const openArea = (a: Area) => { setArea(a); setProposed([]); setGreenRoofs(new Set()); setSelectedId(null); setPlantMode(false); setSpots([]); setHoverPt(null); };
 
-  useEffect(() => {
-    let live = true;
-    setStatus((s) => ({ ...s, nea: { state: 'loading' } }));
-    if (!navigator.onLine) { setWeather(null); setStatus((s) => ({ ...s, nea: { state: 'error', note: 'offline' } })); return; }
-    loadWeather(place.lat, place.lng).then(
-      (w) => { if (live) { setWeather(w); setStatus((s) => ({ ...s, nea: w.airTemp ? { state: 'ok' } : { state: 'error', note: 'no readings' } })); } },
-      (e) => { if (live) setStatus((s) => ({ ...s, nea: { state: 'error', note: String(e.message ?? e) } })); },
-    );
-    return () => { live = false; };
-  }, [place]);
-
+  const site = useMemo(() => (data && area ? nusSite(data, area) : null), [data, area]);
   const trees = useMemo(() => (site ? [...site.trees, ...proposed] : []), [site, proposed]);
-  const profile = useMemo(() => (nus && place.nus ? nusWeather(nus, place.nus.x, place.nus.z, hour) : null), [nus, place, hour]);
-  const sun = useMemo(() => solarPosition(sgDate(hour), place.lat, place.lng), [hour, place]);
+  const sun = useMemo(() => solarPosition(sgDate(hour), NUS_LL.lat, NUS_LL.lng), [hour]);
   const res = useMemo(() => (site ? analyse(site, trees, sun.alt, sun.az) : null), [site, trees, sun]);
   const impact = useMemo(() => (site && res ? computeImpact(site, trees, res, greenRoofs) : null), [site, trees, res, greenRoofs]);
+  const weather = useMemo(() => (data && area ? nusWeather(data, area, hour) : null), [data, area, hour]);
 
-  const plant = (x: number, z: number, hit: Hit) => {
+  // recommendations are for the current plan and time: drop them when either changes
+  useEffect(() => { setSpots([]); }, [proposed, hour, area]);
+  const spotImpact = useMemo(() => {
+    if (!site || !impact || !spots.length) return null;
+    const all = [...trees, ...spots.map((s, i) => proposedTree(`spot${i}`, s.x, s.z))];
+    return computeImpact(site, all, analyse(site, all, sun.alt, sun.az), greenRoofs);
+  }, [site, impact, spots, trees, sun, greenRoofs]);
+
+  const block = site && hoverPt ? plantingBlock(site, trees, hoverPt.x, hoverPt.z) : null;
+  const ghost = plantMode && hoverPt ? { ...hoverPt, radius: DEFAULT_CROWN_RADIUS, ok: !block } : null;
+  const gain = ghost?.ok && res ? shadeGain(res, ghost.x, ghost.z, DEFAULT_CROWN_RADIUS, sun.alt, sun.az) : 0;
+  const selected = site?.buildings.find((b) => b.id === selectedId) ?? null;
+
+  const onPick = (id: number | null, x: number, z: number) => {
     if (!site) return;
-    if (tool === 'roof') {
-      if (hit?.kind !== 'building') return flash('Click a building to toggle its green roof');
-      setGreenRoofs((s) => { const n = new Set(s); n.has(hit.id) ? n.delete(hit.id) : n.add(hit.id); return n; });
-      return;
-    }
-    if (hit?.kind === 'tree') {
-      if (hit.tree.source === 'proposed') setProposed((p) => p.filter((t) => t.id !== hit.tree.id));
-      else flash('Existing trees (OSM / NParks) can’t be removed here');
-      return;
-    }
-    if (site.buildings.some((b) => inRing(x, z, b.ring))) return flash('Can’t plant inside a building');
-    if (site.roads.some((l) => distToPolyline(x, z, l.points) <= l.width / 2) || site.paved.some((p) => inPoly(x, z, p))) return flash('Can’t plant on a road or pavement');
-    if (site.walkways.some((l) => distToPolyline(x, z, l.points) <= l.width / 2)) return flash('Keep footpaths clear');
-    if (trees.some((t) => Math.hypot(t.x - x, t.z - z) < 3)) return flash('Too close to another tree');
-    setProposed((p) => [...p, { id: `p${Date.now()}`, x, z, radius, height: DEFAULT_TREE_HEIGHT, source: 'proposed' }]);
-    setSuggestions([]);
+    if (!plantMode) { setSelectedId(id); return; }
+    const hit = proposed.find((t) => Math.hypot(t.x - x, t.z - z) <= t.radius * 0.6);
+    if (hit) { setProposed((p) => p.filter((t) => t.id !== hit.id)); return; }
+    const why = id != null ? 'Inside a building' : plantingBlock(site, trees, x, z);
+    if (why) return flash(why);
+    setProposed((p) => [...p, proposedTree(`p${Date.now()}`, x, z)]);
   };
 
-  const suggest = (n: number) => {
+  const suggest = () => {
     if (!site || !res) return;
-    const spots = recommend(site, trees, res, n, radius, sun.alt, sun.az);
-    setSuggestions(spots);
-    if (!spots.length) flash('No unshaded street area left to improve');
+    const found = recommend(site, trees, res, 8, DEFAULT_CROWN_RADIUS, sun.alt, sun.az);
+    setSpots(found);
+    setPlantMode(false);
+    if (!found.length) flash('No sunlit paving left to improve here');
   };
-  const acceptSuggestions = () => {
-    setProposed((p) => [...p, ...suggestions.map((s, i): Tree => ({ id: `p${Date.now()}_${i}`, x: s[0], z: s[1], radius, height: DEFAULT_TREE_HEIGHT, source: 'proposed' }))]);
-    setSuggestions([]);
-  };
+  const applySpots = () => { setProposed((p) => [...p, ...spots.map((s, i) => proposedTree(`p${Date.now()}_${i}`, s.x, s.z))]); };
+  const toggleRoof = (id: number) => setGreenRoofs((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const changed = !!impact && (impact.addedTrees > 0 || impact.greenRoofs > 0);
+
+  let card = <Hint>Click a building for its details, or press <b>Plant trees</b> and click the ground. <b>Recommend</b> finds the best spots.</Hint>;
+  if (impact && res && site) {
+    if (spots.length && spotImpact) card = <SpotsCard now={impact} withSpots={spotImpact} spots={spots} onApply={applySpots} onDismiss={() => setSpots([])} open={() => setSources(true)} />;
+    else if (plantMode && ghost) card = <PreviewCard ok={ghost.ok} reason={block} gainM2={gain} pavedArea={res.pavedArea} open={() => setSources(true)} />;
+    else if (selected && !plantMode) card = <BuildingCard b={selected} hour={fmtHour(hour)} sun={sun} greenRoof={greenRoofs.has(selected.id)} onGreenRoof={() => toggleRoof(selected.id)} onClose={() => setSelectedId(null)} open={() => setSources(true)} />;
+    else if (changed) card = <PlanCard im={impact} open={() => setSources(true)} />;
+    else if (plantMode) card = <Hint>Move over the ground: orange paving is sunlit, teal is shaded. Click to plant.</Hint>;
+  }
 
   return (
     <div className="app">
-      <div className="map">
-        {site && res ? (
-          <>
-            {mode3d ? (
-              <Suspense fallback={<div className="center">Loading 3D…</div>}>
-                <Scene3D site={site} trees={trees} res={res} greenRoofs={greenRoofs} sun={sun} onClick={plant} onHover={onHover} onView={setView} />
-              </Suspense>
-            ) : (
-              <MapCanvas site={site} trees={trees} res={res} greenRoofs={greenRoofs} suggestions={suggestions} onClick={plant} onHover={onHover} view={view} setView={setView} onAspect={setAspect} />
-            )}
-            <div className="seg"><button className={!mode3d ? 'on' : ''} onClick={() => setMode3d(false)}>2D</button><button className={mode3d ? 'on' : ''} onClick={() => setMode3d(true)}>3D</button></div>
-            <Minimap site={site} res={res} view={view} aspect={mode3d ? 1 : aspect} setView={(v) => setView(v)} />
-          </>
-        ) : (
-          <div className="center">
-            {status.osm.state === 'error' ? (
-              <div>
-                <p>Couldn’t load OpenStreetMap data ({status.osm.note}). The free public Overpass servers are sometimes busy.</p>
-                <button onClick={() => setAttempt((a) => a + 1)}>Retry</button>
-              </div>
-            ) : 'Loading map data from OpenStreetMap (can take up to a minute when the public servers are busy)…'}
+      {!area || !site || !res ? (
+        <>
+          <div className="map">{data ? <CampusMap data={data} onSelect={openArea} /> : <div className="center">{error ? `Couldn’t load the campus data: ${error}` : 'Loading campus data…'}</div>}</div>
+          <header className="top">
+            <div><h1>CanopyCool</h1><span>NUS Kent Ridge</span></div>
+            <p className="pill">Drag a rectangle over any area to explore it in 3D · or click to pick a {300} m square</p>
+            <button className="link" onClick={() => setSources(true)}>Sources</button>
+          </header>
+          <div className="legend"><i style={{ background: '#6b7a8d' }} />Buildings <i style={{ background: '#22a85a' }} />Trees <i style={{ background: '#0f4429' }} />Dense canopy <i style={{ background: '#2b3644' }} />Paving <i style={{ background: '#1d4ed8' }} />Rooftop PV</div>
+        </>
+      ) : (
+        <>
+          <Suspense fallback={<div className="center">Loading 3D…</div>}>
+            <Scene3D
+              key={`${area.cx},${area.cz},${area.w},${area.d}`}
+              site={site} trees={trees} res={res} greenRoofs={greenRoofs} sun={sun}
+              selectedId={selectedId} plantMode={plantMode} ghost={ghost} spots={spots}
+              onHoverGround={setHoverPt} onPick={onPick}
+            />
+          </Suspense>
+          <header className="top">
+            <button onClick={() => setArea(null)}>← Campus</button>
+            <p className="pill">{Math.round(area.w)} × {Math.round(area.d)} m · {site.buildings.filter((b) => !b.outside).length} buildings · {site.trees.length} trees</p>
+            <button className="link" onClick={() => setSources(true)}>Sources</button>
+          </header>
+          <aside className="side">{card}</aside>
+          <div className="bar">
+            <button className={plantMode ? 'primary' : ''} onClick={() => { setPlantMode((m) => !m); setSelectedId(null); setSpots([]); }}>🌳 Plant trees</button>
+            <button onClick={suggest}>✨ Recommend</button>
+            <button onClick={() => { setProposed([]); setGreenRoofs(new Set()); setSpots([]); }} disabled={!changed}>Reset</button>
+            <div className="time">
+              <label>{fmtHour(hour)} · sun {Math.round((sun.alt * 180) / Math.PI)}° high
+                <input type="range" aria-label="Time of day" min={7} max={18.5} step={0.25} value={hour} onChange={(e) => setHour(+e.target.value)} />
+              </label>
+              {weather && <small>{weather.station}: typical {weather.year[0].toFixed(1)} °C · hot afternoons {weather.hot[0].toFixed(1)} °C</small>}
+            </div>
           </div>
-        )}
-        <div className="hud">{hover ? (hover.kind === 'tree' ? `${hover.tree.source === 'nparks' ? 'NParks heritage tree' : hover.tree.source === 'osm' ? 'OSM tree' : 'Proposed tree'}${hover.tree.label ? ' · ' + hover.tree.label : ''} · crown ⌀ ${(hover.tree.radius * 2).toFixed(0)} m` : hover.label) : 'Hover a feature to see its source data'}</div>
-        {toast && <div className="toast">{toast}</div>}
-      </div>
-      <Panel
-        place={place} setPlace={setPlace} half={half} setHalf={setHalf}
-        status={status} weather={weather} profile={profile} site={site} sun={sun} hour={hour} setHour={setHour}
-        tool={tool} setTool={setTool} radius={radius} setRadius={setRadius}
-        impact={impact} proposed={proposed} suggestions={suggestions} onSuggest={suggest} onAccept={acceptSuggestions}
-        onReset={() => { setProposed([]); setGreenRoofs(new Set()); setSuggestions([]); }}
-      />
+        </>
+      )}
+      {toast && <div className="toast">{toast}</div>}
+      {sources && <Sources onClose={() => setSources(false)} />}
     </div>
   );
 }
-

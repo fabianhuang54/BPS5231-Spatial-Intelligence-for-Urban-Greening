@@ -103,8 +103,8 @@ const polys = (name, tol = 0.4) => {
 const area = (ring) => Math.abs(ring.reduce((s, p, i) => { const q = ring[(i + 1) % ring.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2;
 
 const buildings = polys('nus_campus_map - Buildings').map(({ rings, a }) => {
-  const h = parseFloat(a.height_ag), f = parseFloat(a.floors_ag);
-  return { r: rings[0], h: h > 0 ? h : 0, f: f > 0 ? f : 0 }; // 0 = no height recorded
+  const h = parseFloat(a.height_ag), f = parseFloat(a.floors_ag), fb = parseFloat(a.floors_bg);
+  return { r: rings[0], h: h > 0 ? h : 0, f: f > 0 ? f : 0, fb: fb > 0 ? fb : 0 }; // 0 = not recorded
 });
 // Individual crowns (<= ~6 m radius) become circles; larger merged canopy patches keep their real outline.
 const canopy = polys('nus_campus_map - TreeCanopy', 1.2); // crowns are drawn at 1 m accuracy at most

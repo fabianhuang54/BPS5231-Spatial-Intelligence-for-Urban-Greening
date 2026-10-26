@@ -14,7 +14,7 @@ export const REFS: Ref[] = [
   {
     id: 2,
     cite: 'Xu, L., Bardhan, R., Mei, H., Gopalakrishnan, S., Zheng, X. & Schroepfer, T. (2024). Harnessing street shade to mitigate heat stress: an in-situ parallel investigation under extreme heat conditions in tropical Singapore. Science of the Total Environment 958:177864.',
-    note: 'Paper not accessed (paywalled): the figures below are as reported by secondary coverage; check them against the abstract before citing.',
+    note: 'Paper not accessed (paywalled): the figures here are as reported by secondary coverage; check them against the abstract before citing.',
     doi: '10.1016/j.scitotenv.2024.177864',
     finding: 'Paired sunlit/shaded street locations: shade lowered air temperature by ~0.8 °C and UTCI by 3.1 °C on average.',
   },

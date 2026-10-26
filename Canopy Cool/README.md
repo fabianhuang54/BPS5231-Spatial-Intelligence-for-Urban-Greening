@@ -1,6 +1,14 @@
 # CanopyCool Singapore
 
-Plan street trees and green roofs on a real Singapore site and see the shade and cooling they add. No API keys needed.
+Explore the NUS Kent Ridge campus, see where paving is sunlit, and test where trees and green roofs would help. Works offline; no API keys.
+
+1. The whole campus opens first.
+2. Drag a rectangle (or click for a 300 m square) to open that area in 3D.
+3. Click a building for its height, floors, footprint, rooftop PV/greenery and shadow length.
+4. **Plant trees** to place trees: a live card shows the paving each would newly shade.
+5. **Recommend** ranks the best planting spots and shows what they would change before you accept them.
+
+Every temperature figure is a published, cited difference (see **Sources** in the app, or `src/lib/evidence.ts`).
 
 ## Run
 
@@ -21,15 +29,7 @@ Rebuild the bundle from the project repo (`SHP_files/` and `data/raw/`):
 node scripts/build-nus-data.mjs "<path to the BPS5231 repo>"
 ```
 
-**Live, optional.** Other places (marked "live") and the Live weather panel fetch from public APIs and need a network:
-
-| What | Source |
-|---|---|
-| Roads, footpaths, buildings, trees | OpenStreetMap via Overpass API (© OpenStreetMap contributors, ODbL) |
-| Air temperature, humidity, wind, UV, 2-hour forecast | NEA real-time API on data.gov.sg |
-| Heritage trees | NParks Heritage Trees register on data.gov.sg |
-
-NParks' full street-tree inventory (TreesSG) has no open API. The free Overpass servers are sometimes busy; the app retries and caches results for 7 days.
+The earlier live OpenStreetMap, NEA and NParks loaders were removed to keep the app lean; they are in git history (commit `dee45fc`).
 
 ## Cooling figures
 
