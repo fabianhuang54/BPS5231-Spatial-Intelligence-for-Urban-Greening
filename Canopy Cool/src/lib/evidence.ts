@@ -13,10 +13,9 @@ export const REFS: Ref[] = [
   },
   {
     id: 2,
-    cite: 'Xu, L., Bardhan, R., Mei, H., Gopalakrishnan, S., Zheng, X. & Schroepfer, T. (2024). Harnessing street shade to mitigate heat stress: an in-situ parallel investigation under extreme heat conditions in tropical Singapore. Science of the Total Environment 958:177864.',
-    note: 'Paper not accessed (paywalled): the figures here are as reported by secondary coverage; check them against the abstract before citing.',
+    cite: 'Xu, L., Bardhan, R., Mei, H., Gopalakrishnan, S., Zheng, X. & Schroepfer, T. (2024). Harnessing street shade to mitigate heat stress: an in-situ parallel investigation under extreme heat conditions in tropical Singapore. Science of the Total Environment 958:177864 (2025; online 13 Dec 2024).',
     doi: '10.1016/j.scitotenv.2024.177864',
-    finding: 'Paired sunlit/shaded street locations: shade lowered air temperature by ~0.8 °C and UTCI by 3.1 °C on average.',
+    finding: 'Paired sunlit/shaded street locations (PubMed 39674147): shade lowered air temperature by 0.8 °C and UTCI by 3.1 °C on average.',
   },
   {
     id: 3,
@@ -26,7 +25,7 @@ export const REFS: Ref[] = [
   },
   {
     id: 4,
-    cite: 'Qin, X., Wu, X., Chiew, Y.-M. & Li, Y. (2013). A green roof test bed for stormwater management and reduction of urban heat island effect in Singapore. British Journal of Environment and Climate Change (Zenodo record, 19 Jan 2013).',
+    cite: 'Qin, X., Wu, X., Chiew, Y.-M. & Li, Y. (2012). A green roof test bed for stormwater management and reduction of urban heat island effect in Singapore. British Journal of Environment & Climate Change 2(4):410–420 (online 19 Jan 2013).',
     doi: '10.5281/zenodo.8073',
     finding: 'NTU test bed, 10:00–16:00: green roofs averaged 7.3 °C cooler roof surface and 0.5 °C cooler air than a bare roof.',
   },

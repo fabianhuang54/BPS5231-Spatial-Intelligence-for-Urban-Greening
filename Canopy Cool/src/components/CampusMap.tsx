@@ -41,6 +41,7 @@ export function CampusMap({ data, onSelect }: Props) {
     fillPolys(ctx, data.shrubs, P, AREA_COLORS.shrubs);
     fillPolys(ctx, data.forest.map((f) => f.r), P, AREA_COLORS.forest);
     fillPolys(ctx, data.paved, P, AREA_COLORS.paved);
+    fillPolys(ctx, data.paved.slice(0, data.roadCount), P, AREA_COLORS.roads);
     fillPolys(ctx, data.buildings.map((b) => [b.r]), P, AREA_COLORS.building);
     fillPolys(ctx, data.roofGreen, P, AREA_COLORS.roofGreen);
     fillPolys(ctx, data.pv, P, AREA_COLORS.pv);
@@ -82,7 +83,9 @@ export function CampusMap({ data, onSelect }: Props) {
         if (!drag) return;
         const moved = Math.hypot(drag.b[0] - drag.a[0], drag.b[1] - drag.a[1]) * scale > 8;
         const [x, z] = drag.a;
-        onSelect(moved && rect ? rect : { cx: x, cz: z, w: CLICK_SIDE, d: CLICK_SIDE });
+        const pick: Area = moved && rect ? rect : { cx: x, cz: z, w: CLICK_SIDE, d: CLICK_SIDE };
+        // keep the area's centre on the campus so a stray click doesn't open an empty patch of ground
+        onSelect({ ...pick, cx: Math.min(bounds.x1, Math.max(bounds.x0, pick.cx)), cz: Math.min(bounds.z1, Math.max(bounds.z0, pick.cz)) });
         setDrag(null);
       }}
     />

@@ -21,3 +21,15 @@ export function ringArea(ring: Pt[]): number {
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
   return Math.abs(a) / 2;
 }
+
+/** Inside the ring, or within `margin` metres of its edge. */
+export function nearRing(px: number, pz: number, ring: Pt[], margin: number): boolean {
+  if (inRing(px, pz, ring)) return true;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [ax, az] = ring[i], [bx, bz] = ring[i + 1];
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / l2));
+    if (Math.hypot(px - ax - t * dx, pz - az - t * dz) < margin) return true;
+  }
+  return false;
+}

@@ -38,7 +38,7 @@ describe('geo', () => {
 describe('impact', () => {
   const sq = (x: number): [number, number][] => [[x, 0], [x + 10, 0], [x + 10, 10], [x, 10], [x, 0]];
   const b = (id: number, x: number, outside = false) => ({ id, ring: sq(x), height: 10, heightRecorded: true, floors: 0, floorsBelow: 0, footprint: 100, pvM2: 0, greenRoofM2: 0, outside });
-  const site: Site = { w: 300, d: 300, trees: [], buildings: [b(1, 0), b(2, 50), b(3, 500, true)], paved: [], turf: [], shrubs: [], forest: [], roofGreen: [], pv: [] };
+  const site: Site = { w: 300, d: 300, trees: [], generated: [], buildings: [b(1, 0), b(2, 50), b(3, 500, true)], paved: [], roads: [], turf: [], shrubs: [], forest: [], roofGreen: [], pv: [] };
   const res = (before: number, after: number) => ({ baselineFrac: before, scenarioFrac: after, newShadedM2: 0 } as ShadeResult);
   const tree: Tree = { id: 'p', x: 0, z: 0, radius: 4, height: 10, source: 'proposed' };
 

@@ -52,38 +52,44 @@ export function buildingMask(buildings: Building[], g: Grid): Uint8Array {
   return alphaMask(ctx, g);
 }
 
-/** Building shadows: each footprint edge swept along the shadow vector. */
-export function buildingShadow(buildings: Building[], g: Grid, alt: number, az: number): Uint8Array {
-  const ctx = mkCanvas(g);
-  ctx.fillStyle = '#000';
-  if (alt > 0.02) {
-    for (const b of buildings) {
-      const [dx, dz] = shadowOffset(b.height, alt, az);
-      for (let i = 0; i < b.ring.length - 1; i++) {
-        const [ax, az0] = b.ring[i], [bx, bz] = b.ring[i + 1];
-        ctx.beginPath();
-        path(ctx, g, [[ax, az0], [bx, bz], [bx + dx, bz + dz], [ax + dx, az0 + dz]]);
-        ctx.fill();
-      }
+/** Building shadows: each footprint edge swept along the shadow vector. `g` can be the analysis grid or a high-res picture frame. */
+export function paintBuildingShadow(ctx: CanvasRenderingContext2D, g: Grid, buildings: Building[], alt: number, az: number) {
+  if (alt <= 0.02) return;
+  for (const b of buildings) {
+    const [dx, dz] = shadowOffset(b.height, alt, az);
+    for (let i = 0; i < b.ring.length - 1; i++) {
+      const [ax, az0] = b.ring[i], [bx, bz] = b.ring[i + 1];
+      ctx.beginPath();
+      path(ctx, g, [[ax, az0], [bx, bz], [bx + dx, bz + dz], [ax + dx, az0 + dz]]);
+      ctx.fill();
     }
   }
-  return alphaMask(ctx, g);
 }
 
 /** Canopy shade: crown discs and dense canopy patches, displaced by the shadow of the crown height. */
+export function paintCanopyShade(ctx: CanvasRenderingContext2D, g: Grid, trees: Tree[], alt: number, az: number, forest: Poly[] = []) {
+  if (alt <= 0.02) return;
+  for (const t of trees) {
+    const [dx, dz] = shadowOffset(t.height * 0.75, alt, az);
+    ctx.beginPath();
+    ctx.ellipse(cx(g, t.x + dx), cz(g, t.z + dz), (t.radius * g.nx) / g.w, (t.radius * g.nz) / g.d, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const [fx, fz] = shadowOffset(DEFAULT_TREE_HEIGHT * 0.75, alt, az);
+  fillPolys(ctx, g, forest, fx, fz);
+}
+
+export function buildingShadow(buildings: Building[], g: Grid, alt: number, az: number): Uint8Array {
+  const ctx = mkCanvas(g);
+  ctx.fillStyle = '#000';
+  paintBuildingShadow(ctx, g, buildings, alt, az);
+  return alphaMask(ctx, g);
+}
+
 export function canopyShade(trees: Tree[], g: Grid, alt: number, az: number, forest: Poly[] = []): Uint8Array {
   const ctx = mkCanvas(g);
   ctx.fillStyle = '#000';
-  if (alt > 0.02) {
-    for (const t of trees) {
-      const [dx, dz] = shadowOffset(t.height * 0.75, alt, az);
-      ctx.beginPath();
-      ctx.ellipse(cx(g, t.x + dx), cz(g, t.z + dz), (t.radius * g.nx) / g.w, (t.radius * g.nz) / g.d, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    const [fx, fz] = shadowOffset(DEFAULT_TREE_HEIGHT * 0.75, alt, az);
-    fillPolys(ctx, g, forest, fx, fz);
-  }
+  paintCanopyShade(ctx, g, trees, alt, az, forest);
   return alphaMask(ctx, g);
 }
 
@@ -139,7 +145,7 @@ export interface Spot { x: number; z: number; gainM2: number }
  * Greedy tree siting: candidates are open ground within ~6 m of paved cells (off the pavement, outside buildings).
  * Each pick maximises the paved, currently unshaded area its crown newly covers.
  */
-export function recommend(site: Site, trees: Tree[], res: ShadeResult, count: number, radius: number, alt: number, az: number): Spot[] {
+export function recommend(trees: Tree[], res: ShadeResult, count: number, radius: number, alt: number, az: number): Spot[] {
   const g = res.grid, { paved, building, bShade, allTree } = res.masks;
   const shaded = new Uint8Array(paved.length);
   for (let i = 0; i < shaded.length; i++) shaded[i] = bShade[i] || allTree[i] ? 1 : 0;

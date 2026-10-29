@@ -16,7 +16,13 @@ export interface Building {
   outside?: boolean; // in the shadow margin, beyond the selected area
 }
 
-export interface Tree { id: string; x: number; z: number; radius: number; height: number; source: 'nus' | 'proposed' }
+export interface Tree {
+  id: string; x: number; z: number; radius: number; height: number; source: 'nus' | 'proposed';
+  /** Mapped crown centred on a building footprint (an overhanging crown): still shades, but isn't drawn as a tree standing on the roof. */
+  overBuilding?: boolean;
+}
+/** A tree placed inside a dense canopy patch to show it as trees. Display only: not a surveyed location, and not used in the shade analysis. */
+export interface GeneratedTree { x: number; z: number; radius: number }
 
 /** Selected rectangle, in campus metres. */
 export interface Area { cx: number; cz: number; w: number; d: number }
@@ -27,5 +33,6 @@ export interface Site {
   d: number;
   buildings: Building[];
   trees: Tree[];
-  paved: Poly[]; turf: Poly[]; shrubs: Poly[]; forest: Poly[]; roofGreen: Poly[]; pv: Poly[];
+  generated: GeneratedTree[];
+  paved: Poly[]; roads: Poly[]; turf: Poly[]; shrubs: Poly[]; forest: Poly[]; roofGreen: Poly[]; pv: Poly[];
 }

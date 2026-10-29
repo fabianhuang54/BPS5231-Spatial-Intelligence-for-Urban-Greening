@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { BuildingCard, Hint, PlanCard, PreviewCard, SpotsCard } from './components/Cards';
 import { CampusMap } from './components/CampusMap';
 import { Sources } from './components/Sources';
@@ -8,6 +8,7 @@ import { loadNus, NUS_LL, nusSite, nusWeather, type NusData } from './lib/nus';
 import { plantingBlock } from './lib/planting';
 import { analyse, recommend, shadeGain, type Spot } from './lib/shade';
 import { solarPosition, sgDate } from './lib/sun';
+import { validateArea, validatePlan } from './lib/validate';
 import type { Area, Tree } from './lib/types';
 
 const Scene3D = lazy(() => import('./components/Scene3D')); // Three.js loads only when an area is opened
@@ -36,13 +37,22 @@ export default function App() {
 
   const site = useMemo(() => (data && area ? nusSite(data, area) : null), [data, area]);
   const trees = useMemo(() => (site ? [...site.trees, ...proposed] : []), [site, proposed]);
-  const sun = useMemo(() => solarPosition(sgDate(hour), NUS_LL.lat, NUS_LL.lng), [hour]);
+  // the slider moves at once; the heavy shade and ground work follows the latest value instead of every step
+  const settledHour = useDeferredValue(hour);
+  const sun = useMemo(() => solarPosition(sgDate(settledHour), NUS_LL.lat, NUS_LL.lng), [settledHour]);
   const res = useMemo(() => (site ? analyse(site, trees, sun.alt, sun.az) : null), [site, trees, sun]);
   const impact = useMemo(() => (site && res ? computeImpact(site, trees, res, greenRoofs) : null), [site, trees, res, greenRoofs]);
-  const weather = useMemo(() => (data && area ? nusWeather(data, area, hour) : null), [data, area, hour]);
+  const weather = useMemo(() => (data && area ? nusWeather(data, area, settledHour) : null), [data, area, settledHour]);
+
+  // feedback loop: everything shown is checked against the layers, and a failure is surfaced instead of hidden
+  const siteChecks = useMemo(() => (site ? validateArea(site, res) : []), [site, !!res]); // heavier: only when the area changes
+  const planChecks = useMemo(() => (site ? validatePlan(site, trees, greenRoofs, res) : []), [site, trees, greenRoofs, res]); // light: on every change
+  const checks = useMemo(() => [...siteChecks, ...planChecks], [siteChecks, planChecks]);
+  const failing = checks.filter((c) => !c.pass);
+  useEffect(() => { if (failing.length) console.error('Data checks failed:', failing); }, [failing.length]);
 
   // recommendations are for the current plan and time: drop them when either changes
-  useEffect(() => { setSpots([]); }, [proposed, hour, area]);
+  useEffect(() => { setSpots([]); }, [proposed, settledHour, area]);
   const spotImpact = useMemo(() => {
     if (!site || !impact || !spots.length) return null;
     const all = [...trees, ...spots.map((s, i) => proposedTree(`spot${i}`, s.x, s.z))];
@@ -54,11 +64,10 @@ export default function App() {
   const gain = ghost?.ok && res ? shadeGain(res, ghost.x, ghost.z, DEFAULT_CROWN_RADIUS, sun.alt, sun.az) : 0;
   const selected = site?.buildings.find((b) => b.id === selectedId) ?? null;
 
-  const onPick = (id: number | null, x: number, z: number) => {
+  const onPick = (id: number | null, x: number, z: number, treeId?: string) => {
     if (!site) return;
     if (!plantMode) { setSelectedId(id); return; }
-    const hit = proposed.find((t) => Math.hypot(t.x - x, t.z - z) <= t.radius * 0.6);
-    if (hit) { setProposed((p) => p.filter((t) => t.id !== hit.id)); return; }
+    if (treeId) { setProposed((p) => p.filter((t) => t.id !== treeId)); return; } // clicked a tree you planted
     const why = id != null ? 'Inside a building' : plantingBlock(site, trees, x, z);
     if (why) return flash(why);
     setProposed((p) => [...p, proposedTree(`p${Date.now()}`, x, z)]);
@@ -66,7 +75,8 @@ export default function App() {
 
   const suggest = () => {
     if (!site || !res) return;
-    const found = recommend(site, trees, res, 8, DEFAULT_CROWN_RADIUS, sun.alt, sun.az);
+    // belt and braces: a spot must pass the same rules as a click
+    const found = recommend(trees, res, 8, DEFAULT_CROWN_RADIUS, sun.alt, sun.az).filter((s) => !plantingBlock(site, trees, s.x, s.z));
     setSpots(found);
     setPlantMode(false);
     if (!found.length) flash('No sunlit paving left to improve here');
@@ -101,16 +111,17 @@ export default function App() {
           <Suspense fallback={<div className="center">Loading 3D…</div>}>
             <Scene3D
               key={`${area.cx},${area.cz},${area.w},${area.d}`}
-              site={site} trees={trees} res={res} greenRoofs={greenRoofs} sun={sun}
+              site={site} trees={trees} greenRoofs={greenRoofs} sun={sun}
               selectedId={selectedId} plantMode={plantMode} ghost={ghost} spots={spots}
               onHoverGround={setHoverPt} onPick={onPick}
             />
           </Suspense>
           <header className="top">
             <button onClick={() => setArea(null)}>← Campus</button>
-            <p className="pill">{Math.round(area.w)} × {Math.round(area.d)} m · {site.buildings.filter((b) => !b.outside).length} buildings · {site.trees.length} trees</p>
+            <p className="pill">{Math.round(area.w)} × {Math.round(area.d)} m · {site.buildings.filter((b) => !b.outside).length} buildings · {site.trees.length} mapped trees · {site.generated.length.toLocaleString()} generated in dense canopy</p>
             <button className="link" onClick={() => setSources(true)}>Sources</button>
           </header>
+          {failing.length > 0 && <div className="alert" role="alert">⚠ Data check failed: {failing.map((c) => c.name).join('; ')}. <button className="link" onClick={() => setSources(true)}>Details</button></div>}
           <aside className="side">{card}</aside>
           <div className="bar">
             <button className={plantMode ? 'primary' : ''} onClick={() => { setPlantMode((m) => !m); setSelectedId(null); setSpots([]); }}>🌳 Plant trees</button>
@@ -126,7 +137,7 @@ export default function App() {
         </>
       )}
       {toast && <div className="toast">{toast}</div>}
-      {sources && <Sources onClose={() => setSources(false)} />}
+      {sources && data && <Sources onClose={() => setSources(false)} build={data.validation.checks} area={checks} />}
     </div>
   );
 }
